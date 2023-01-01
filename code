@@ -1,0 +1,118 @@
+#lang pl
+#| The grammar: 
+
+all the first 9 rules are from the class
+<FLANG> ::= <num> ;; Rule 1 
+ 
+| { + <FLANG> <FLANG> } ;; Rule 2 
+ 
+| { - <FLANG> <FLANG> } ;; Rule 3 
+ 
+| { * <FLANG> <FLANG> } ;; Rule 4 
+ 
+| { / <FLANG> <FLANG> } ;; Rule 5 
+ 
+| { with { <id> <FLANG> } <FLANG> } ;; Rule 6 
+ 
+| <id> ;; Rule 7 
+ 
+| { fun { <id> } <FLANG> } ;; Rule 8 
+ 
+| { call <FLANG> <FLANG> } ;; Rule 9 
+ 
+|<Bool> ;; add rule for True ;; Rule 10 //True/False
+ 
+|{> <FLANG> <FLANG>};; Rule 11 //11-13 operations rules
+ 
+|{= <FLANG> <FLANG>} ;; add rule for = ;; Rule 12 
+ 
+| {< <FLANG> <FLANG>};; Rule 13
+
+|{not <FLANG>}after not we get rule 10;; Rule 14
+ 
+|{if {<FLANG>} {<id> <FLANG>}{<id> <FLANG>} ;; add rule 15 for (the above) if 
+expressions the first <id> is for the "then-do", and the second is for "else-do"
+|#
+
+(define-type FLANG
+            [Num Number]
+            [Add FLANG FLANG]
+            [Sub FLANG FLANG]
+            [Mul FLANG FLANG]
+            [Div FLANG FLANG]
+            [With Symbol FLANG FLANG];name, named-expr, body
+            [Id Symbol]
+            [Fun Symbol FLANG]; parameter-name, body
+            [Call FLANG FLANG]
+            [Bool Boolean] ;;Bool true / Bool false
+            [Bigger FLANG FLANG] ;; {> exp exp}
+            [Smaller FLANG FLANG];; {< exp exp}
+            [Equal FLANG FLANG] ;;{= exp exp}
+            [Not FLANG] 
+            [If FLANG Symbol FLANG Symbol FLANG]) ;;if condition then-do res else-do res2
+
+  
+
+(: parse-sexpr : Sexpr -> FLANG)
+
+(define (parse-sexpr sexpr)
+          (match sexpr ;;check sexpr if it match to one of the next options
+          [(number: n) (Num n)] 
+          ['True (Bool true)] 
+          ['False (Bool false)] 
+          [(symbol: name) (Id name)] ;;from the class solution
+          [(cons 'with more)
+          ( match sexpr
+          [(list 'with (list (symbol: name) named-expr) body)
+                                 (With name (parse-sexpr named-expr)
+                                             (parse-sexpr body))]
+             [else (error 'parse-sexpr "bad with syntax!!")])]
+          [(cons 'fun more);;from the class solution
+          ( match sexpr
+          [(list 'fun (list (symbol: name)) body)
+                                 (Fun name (parse-sexpr body))]
+             [else (error 'parse-sexpr "bad fun syntax!!")])]
+          
+          [(list 'call fun-expr arg-expr);;from the class solution
+                                           (Call (parse-sexpr fun-expr)
+                                                 (parse-sexpr arg-expr))]
+          [(list '+ l r) (Add (parse-sexpr l) (parse-sexpr r))]
+          [(list '- l r) (Sub (parse-sexpr l) (parse-sexpr r))]
+          [(list '* l r) (Mul (parse-sexpr l) (parse-sexpr r))]
+          [(list '/ l r) (Div (parse-sexpr l) (parse-sexpr r))]
+          [(list '= lhs rhs) (Equal (parse-sexpr lhs) (parse-sexpr rhs))] ;;parsing the opertions rules (very similar to the arithmetic rules)
+          [(list '> lhs rhs) (Bigger (parse-sexpr lhs) (parse-sexpr rhs))] 
+          [(list '< lhs rhs) (Smaller (parse-sexpr lhs) (parse-sexpr rhs))]
+          [(list 'not exp) (Not(parse-sexpr exp))]
+          [(cons 'if more);;if the parse grts an "if" expression it need to check if it compatible with the "if" expression rules
+           (match sexpr
+          [(list 'if condition (list (symbol: then-do) op)(list (symbol: else-do) op2));;match to the arguments of the function in the definition
+                                 (If (parse-sexpr condition) then-do (parse-sexpr op) else-do (parse-sexpr op2))] 
+          [else (error 'parse-sexpr "bad syntax in ~s" sexpr)])]))
+
+         
+
+(: parse : String -> FLANG)
+(define (parse code)
+       (parse-sexpr (string->sexpr code)))
+
+(test (parse "4") => (Num 4))
+(test (parse "{> 5 2}") => (Bigger (Num 5) (Num 2)))
+(test (parse "{= 5 5}") => (Equal (Num 5) (Num 5)))
+(test (parse "{< 2 5}") => (Smaller (Num 2) (Num 5)))
+(test (parse "{not True}") => (Not (Bool true)))
+(test (parse "{if {> 5 2} {then-do True} {else-do False}}") => (If (Bigger (Num 5) (Num 2)) 'then-do (Bool true) 'else-do (Bool false)))
+(test (parse "{if {< 3 1}{then-do False}}") =error> "bad syntax in (if (< 3 1) (then-do False))")
+(test (parse "4") => (Num 4))
+(test (parse "{+ 3 5}") => (Add (Num 3) (Num 5)))
+(test (parse "{+ 3 {- 8 {+ 2 1}}}") => (Add (Num 3) (Sub (Num 8) (Add (Num 2) (Num 1)))))
+
+
+(test (parse "{with {x {+ 4 2}} {* x x}}") => (With 'x (Add (Num 4) (Num 2))
+                                              (Mul (Id 'x) (Id 'x))))
+
+(test (parse "{fun {x} x}") => (Fun 'x (Id 'x)))
+(test (parse "{fun {x} {/ x 5}}") => (Fun 'x (Div (Id 'x) (Num 5))))
+(test (parse "{call {fun {x} {/ x 5}} 8}") => (Call {Fun 'x (Div (Id 'x) (Num 5))} (Num 8)))
+(test (parse "{fun x {* x x}}")=error> "bad fun syntax")
+(test (parse "{with x {* x x}}")=error> "bad with syntax")
