@@ -1,4 +1,5 @@
 #lang pl
+
 #| The grammar: 
 
 all the first 9 rules are from the class
@@ -49,7 +50,7 @@ expressions the first <id> is for the "then-do", and the second is for "else-do"
             [Smaller FLANG FLANG];; {< exp exp}
             [Equal FLANG FLANG] ;;{= exp exp}
             [Not FLANG] 
-            [If FLANG Symbol FLANG Symbol FLANG]) ;;if condition then-do res else-do res2
+            [If FLANG  FLANG FLANG]) ;;if condition then-do res else-do res2
 
   
 
@@ -87,7 +88,7 @@ expressions the first <id> is for the "then-do", and the second is for "else-do"
           [(cons 'if more);;if the parse grts an "if" expression it need to check if it compatible with the "if" expression rules
            (match sexpr
           [(list 'if condition (list (symbol: then-do) op)(list (symbol: else-do) op2));;match to the arguments of the function in the definition
-                                 (If (parse-sexpr condition) then-do (parse-sexpr op) else-do (parse-sexpr op2))] 
+                                 (If (parse-sexpr condition) (parse-sexpr op) (parse-sexpr op2))] 
           [else (error 'parse-sexpr "bad syntax in ~s" sexpr)])]))
 
          
@@ -96,23 +97,224 @@ expressions the first <id> is for the "then-do", and the second is for "else-do"
 (define (parse code)
        (parse-sexpr (string->sexpr code)))
 
-(test (parse "4") => (Num 4))
-(test (parse "{> 5 2}") => (Bigger (Num 5) (Num 2)))
-(test (parse "{= 5 5}") => (Equal (Num 5) (Num 5)))
-(test (parse "{< 2 5}") => (Smaller (Num 2) (Num 5)))
-(test (parse "{not True}") => (Not (Bool true)))
-(test (parse "{if {> 5 2} {then-do True} {else-do False}}") => (If (Bigger (Num 5) (Num 2)) 'then-do (Bool true) 'else-do (Bool false)))
-(test (parse "{if {< 3 1}{then-do False}}") =error> "bad syntax in (if (< 3 1) (then-do False))")
-(test (parse "4") => (Num 4))
-(test (parse "{+ 3 5}") => (Add (Num 3) (Num 5)))
-(test (parse "{+ 3 {- 8 {+ 2 1}}}") => (Add (Num 3) (Sub (Num 8) (Add (Num 2) (Num 1)))))
+(test (parse "4")
+      => (Num 4))
+(test (parse "{> 5 2}")
+      => (Bigger (Num 5) (Num 2)))
+(test (parse "{= 5 5}")
+      => (Equal (Num 5) (Num 5)))
+(test (parse "{< 2 5}")
+      => (Smaller (Num 2) (Num 5)))
+(test (parse "{not True}")
+      => (Not (Bool true)))
+(test (parse "{if {> 5 2} {then-do True} {else-do False}}") => (If (Bigger (Num 5) (Num 2)) (Bool true) (Bool false)))
+(test (parse "{if {< 3 1}{then-do False}}")
+      =error> "bad syntax in (if (< 3 1) (then-do False))")
+(test (parse "4")
+      => (Num 4))
+(test (parse "{+ 3 5}")
+      => (Add (Num 3) (Num 5)))
+(test (parse "{+ 3 {- 8 {+ 2 1}}}")
+      => (Add (Num 3) (Sub (Num 8) (Add (Num 2) (Num 1)))))
 
 
-(test (parse "{with {x {+ 4 2}} {* x x}}") => (With 'x (Add (Num 4) (Num 2))
-                                              (Mul (Id 'x) (Id 'x))))
+(test (parse "{with {x {+ 4 2}} {* x x}}")
+      => (With 'x (Add (Num 4) (Num 2))(Mul (Id 'x) (Id 'x))))
 
-(test (parse "{fun {x} x}") => (Fun 'x (Id 'x)))
-(test (parse "{fun {x} {/ x 5}}") => (Fun 'x (Div (Id 'x) (Num 5))))
-(test (parse "{call {fun {x} {/ x 5}} 8}") => (Call {Fun 'x (Div (Id 'x) (Num 5))} (Num 8)))
-(test (parse "{fun x {* x x}}")=error> "bad fun syntax")
-(test (parse "{with x {* x x}}")=error> "bad with syntax")
+(test (parse "{fun {x} x}")
+      => (Fun 'x (Id 'x)))
+(test (parse "{fun {x} {/ x 5}}")
+      => (Fun 'x (Div (Id 'x) (Num 5))))
+(test (parse "{call {fun {x} {/ x 5}} 8}")
+      => (Call {Fun 'x (Div (Id 'x) (Num 5))} (Num 8)))
+(test (parse "{fun x {* x x}}")
+      =error> "bad fun syntax")
+(test (parse "{with x {* x x}}"
+             )=error> "bad with syntax")
+
+
+
+
+;-------Q4------
+ 
+#|
+subst:
+
+ 
+a. N[v/x] = N 
+b. {+ E1 E2}[v/x] = {+ E1[v/x] E2[v/x]} 
+c. {- E1 E2}[v/x] = {- E1[v/x] E2[v/x]} 
+d. {* E1 E2}[v/x] = {* E1[v/x] E2[v/x]} 
+e. {/ E1 E2}[v/x] = {/ E1[v/x] E2[v/x]} 
+f. y[v/x] = y 
+g. x[v/x] = v 
+h. {with {y E1} E2}[v/x] = {with {y E1[v/x]} E2[v/x]} ; if y =/= x 
+i. {with {x E1} E2}[v/x] = {with {x E1[v/x]} E2} 
+j. {call E1 E2}[v/x] = {call E1[v/x] E2[v/x]} 
+k. {fun {y} E}[v/x] = {fun {y} E[v/x]} ; if y =/= x 
+l. {fun {x} E}[v/x] = {fun {x} E} 
+m. B[v/x] = B ;; B is Boolean 
+n. {= E1 E2}[v/x] = {= E1[v/x] E2[v/x]} 
+o. {> E1 E2}[v/x] = {> E1[v/x] E2[v/x]} 
+p. {< E1 E2}[v/x] = {< E1[v/x] E2[v/x]} 
+q. { not E}[v/x] = {not E[v/x]} 
+r. {if Econd {then-do Edo} {else-do Eelse}}[v/x] = {if Econd[v/x] {then-do Edo[v/x]} {else-do Eelse[v/x]}}
+|#
+(: subst : FLANG Symbol FLANG -> FLANG)
+#|
+ substitutes the second argument with the third argument in the 
+ first argument, as per the rules of substitution; the resulting 
+ expression contains no free instances of the second argument
+|#
+(define (subst expr from to)
+        (cases expr
+            [(Num n) expr]
+            [(Add l r) (Add (subst l from to) (subst r from to))]
+            [(Sub l r) (Sub (subst l from to) (subst r from to))]
+            [(Mul l r) (Mul (subst l from to) (subst r from to))]
+            [(Div l r) (Div (subst l from to) (subst r from to))]
+            [(With name named body)
+                      (With name (subst named from to)
+                            (if (eq? from name)
+                                body
+                                (subst body from to)))]
+          [(Fun name body)
+                          (Fun name (if (eq? name from)
+                              body
+                              (subst  body from to)))]
+          [(Call fun-expr arg-expr)  (Call (subst fun-expr from to) (subst arg-expr from to))]
+            [(Id name) (if (eq? from name)
+                           to
+                           expr)]
+          [(Bool b) expr]
+          [(Equal l r) (Equal (subst l from to) (subst r from to))]
+          [(Bigger l r) (Bigger (subst l from to) (subst r from to))]
+          [(Smaller l r) (Smaller (subst l from to) (subst r from to))]
+          [(Not b) (Not (subst b from to))]
+          [(If condition op op2) (If (subst condition from to) (subst op from to) (subst op2 from to))]
+         ))
+;Tests
+;==================================================
+
+(test (subst (Id 'x)
+             'x
+             (Num 10)) => (Num 10))
+
+(test (subst (Mul (Id 'x) (Id 'x)); ==> e
+       'x ;==> i
+       (Num 10) ;==> v
+       ) => (Mul (Num 10) (Num 10)))
+
+(test (subst (Add (Id 'x) (Id 'x)); ==> e
+       'x ;==> i
+       (Num 10) ;==> v
+       ) => (Add (Num 10) (Num 10)))
+
+(test (subst (Sub (Id 'x) (Id 'x)); ==> e
+       'x ;==> i
+       (Num 10) ;==> v
+       ) => (Sub (Num 10) (Num 10)))
+
+;==================================================
+
+;; The following function is used in multiple places below,
+;; hence, it is now a top-level definition
+(: Num->number : FLANG -> Number)
+;; gets a FLANG -- presumably a Num variant -- and returns the
+;; unwrapped number
+(define (Num->number e)
+(cases e
+[(Num n) n]
+[else (error 'Num->number "expected a number, got: ~s" e)]))
+(: arith-op : (Number Number -> Number) FLANG FLANG -> FLANG)
+;; gets a Racket numeric binary operator, and uses it within a FLANG
+;; `Num' wrapper
+(define (arith-op op expr1 expr2)
+(Num (op (Num->number expr1) (Num->number expr2))))
+
+(: logic-op : (Number Number -> Boolean) FLANG FLANG -> FLANG)
+;; gets a Racket Boolean binary operator (on numbers), and applies it
+;; to two `Num' wrapped FLANGs
+(define (logic-op op expr1 expr2)
+(Bool (op (Num->number expr1) (Num->number expr2))));-->mine
+(: flang->bool : FLANG -> Boolean)
+;; gets a Flang E (of any kind) and returns a its appropiate
+;; Boolean value -- which is true if and only if E does not
+;; represent false
+;; Remark: the `flang->bool` function will also be top-level
+;; since it's used in more than one place.
+(define (flang->bool e)
+(cases e
+[(Bool b) b]
+[(Equal l r) (flang->bool (logic-op eq? l r))]
+[(Bigger l r) (flang->bool (logic-op > l r))]
+[(Smaller l r) (flang->bool (logic-op < l r))]
+[(Not b) (not b)]
+[else true]))
+
+#|
+eval: Evaluation rules: 
+ eval(N) = N ;; N is an expression for a numeric value 
+eval({+ E1 E2}) = eval(E1) + eval(E2) \ if both E1 and E2 
+eval({- E1 E2}) = eval(E1) - eval(E2) \ evaluate to numbers 
+eval({* E1 E2}) = eval(E1) * eval(E2) / otherwise error! 
+eval({/ E1 E2}) = eval(E1) / eval(E2) / 
+eval(id) = error! eval({with {x E1} E2}) = 
+eval(E2[eval(E1)/x]) 
+eval(FUN) = FUN ; assuming FUN is a function expression 
+eval({call E1 E2}) = eval(Ef[eval(E2)/x]) 
+if eval(E1)={fun {x} Ef} 
+ = error! otherwise 
+ 
+eval(B) = B ;; B is an expression for a Boolean value 
+eval({= E1 E2}) = eval(E1) = eval(E2) \ if both E1 and E2 
+eval({> E1 E2}) = eval(E1) > eval(E2) \ evaluate to 
+ numbers 
+eval({< E1 E2}) = eval(E1) < eval(E2) / otherwise error! 
+eval({not E}) = not(eval(E)) /E may be anything 
+eval({if Econd {then-do Edo} {else-do Eelse}}) 
+= eval(Edo) if eval(Econd) =/= false, 
+eval(Eelse), otherwise.
+|#
+
+(: eval : FLANG -> FLANG)
+;; evaluates FLANG expressions by reducing them to *expressions*
+(define (eval expr)
+(cases expr
+[(Num n) expr]
+[(Add l r)  (arith-op + (eval l) (eval r))]
+[(Sub l r) (arith-op - (eval l) (eval r))]
+[(Mul l r) (arith-op * (eval l) (eval r))]
+[(Div l r) (arith-op / (eval l) (eval r))]
+[(With name named body) (eval (subst body name (eval named)))]
+[(Id name) (error 'eval "free identifier: ~s" name)]
+[(Fun name body) expr]
+[(Call fun-expr arg-expr) (let ([fval (eval fun-expr)])
+                            (cases fval
+                             [(Fun name body) (eval (subst body name (eval arg-expr)))]
+                             [else (error 'eval "expected a function, got: ~s" fval)]))]
+[(Bool bol) expr]
+[(Equal l r) (logic-op = (eval l) (eval r))]
+[(Smaller l r) (logic-op < (eval l) (eval r))]
+[(Bigger l r) (logic-op > (eval l) (eval r))]
+[(If l m r)
+(let ([val (flang->bool l)])
+(if val (eval m) (eval r)))]
+[(Not exp) (Bool (not (flang->bool (eval exp))))]))
+
+
+;Q5
+(: run : String -> (U Number Boolean FLANG))
+ ;; evaluate a FLANG program contained in a string
+ (define (run str)
+ (let ([result (eval (parse str))])
+(cases result
+ [(Num num) num]
+ [(Bool bol) bol]
+ [else result])))
+
+(test (run "7")
+      => 7)
+
+(test (run "{+ 10 20}")
+      => 30)
