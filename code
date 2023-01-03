@@ -89,7 +89,7 @@ expressions the first <id> is for the "then-do", and the second is for "else-do"
            (match sexpr
           [(list 'if condition (list (symbol: then-do) op)(list (symbol: else-do) op2));;match to the arguments of the function in the definition
                                  (If (parse-sexpr condition) (parse-sexpr op) (parse-sexpr op2))] 
-          [else (error 'parse-sexpr "bad syntax in ~s" sexpr)])]))
+          [else (error 'parse-sexpr "bad 'if' syntax in ~s" sexpr)])]))
 
          
 
@@ -109,7 +109,7 @@ expressions the first <id> is for the "then-do", and the second is for "else-do"
       => (Not (Bool true)))
 (test (parse "{if {> 5 2} {then-do True} {else-do False}}") => (If (Bigger (Num 5) (Num 2)) (Bool true) (Bool false)))
 (test (parse "{if {< 3 1}{then-do False}}")
-      =error> "bad syntax in (if (< 3 1) (then-do False))")
+      =error> "bad 'if' syntax in (if (< 3 1) (then-do False))")
 (test (parse "4")
       => (Num 4))
 (test (parse "{+ 3 5}")
@@ -196,14 +196,27 @@ r. {if Econd {then-do Edo} {else-do Eelse}}[v/x] = {if Econd[v/x] {then-do Edo[v
 ;Tests
 ;==================================================
 
+(test (subst (Bool true) 'x (Bool true)) => (Bool true))
 (test (subst (Id 'x)
              'x
              (Num 10)) => (Num 10))
+(test (subst (Not (Id 'x)); ==> e
+       'x ;==> i
+       (Bool true) ;==> v
+       ) => (Not (Bool true)))
 
 (test (subst (Mul (Id 'x) (Id 'x)); ==> e
        'x ;==> i
        (Num 10) ;==> v
        ) => (Mul (Num 10) (Num 10)))
+(test (subst (Equal (Id 'x) (Id 'x)); ==> e
+       'x ;==> i
+       (Num 10) ;==> v
+       ) => (Equal (Num 10) (Num 10)))
+(test (subst (Smaller (Id 'x) (Id 'x)); ==> e
+       'x ;==> i
+       (Num 10) ;==> v
+       ) => (Smaller (Num 10) (Num 10)))
 
 (test (subst (Add (Id 'x) (Id 'x)); ==> e
        'x ;==> i
@@ -214,6 +227,51 @@ r. {if Econd {then-do Edo} {else-do Eelse}}[v/x] = {if Econd[v/x] {then-do Edo[v
        'x ;==> i
        (Num 10) ;==> v
        ) => (Sub (Num 10) (Num 10)))
+(test (subst (Mul (Id 'x) (Id 'x)); ==> e
+       'x ;==> i
+       (Num 6) ;==> v
+       ) => (Mul (Num 6) (Num 6)))
+
+
+(test (subst (Id 'x)
+             'x
+             (Num 8)) => (Num 8))
+
+(test (subst (Id 'y)
+             'x
+             (Num 8)) => (Id 'y))
+(test (subst (With 'x (Num 3)
+                   (Id 'x))
+             'x
+             (Num 5)) => (With 'x (Num 3)
+                   (Id 'x)))
+(test (subst (With 'y
+                   (Add (Id 'x) (Num 3))
+                   (Add (Id 'x) (Num 5)))
+             'x
+             (Num 4)) => (With 'y
+                               (Add (Num 4) (Num 3))
+                               (Add (Num 4) (Num 5))))
+
+(test (subst (Fun 'x (Add (Id 'x) (Id 'y)))
+             'x
+             (Num 4)) => (Fun 'x (Add (Id 'x) (Id 'y))))
+
+(test (subst (Fun 'x (Add (Id 'x) (Id 'y)))
+             'y
+             (Num 4)) => (Fun 'x (Add (Id 'x) (Num 4))))
+(test (subst (Call (Fun 'x (Div (Id 'x) (Id 'y)))
+                   (Add (Id 'x) (Id 'y)))
+                   'x
+                   (Num 3)) => (Call (Fun 'x (Div (Id 'x) (Id 'y)))
+                   (Add (Num 3) (Id 'y))))
+
+(test (subst (Call (Fun 'x (Div (Id 'x) (Id 'y)))
+                   (Add (Id 'x) (Id 'y)))
+                   'y
+                   (Num 3)) => (Call (Fun 'x (Div (Id 'x) (Num 3)))
+                   (Add (Id 'x) (Num 3))))
+
 
 ;==================================================
 
@@ -251,6 +309,10 @@ r. {if Econd {then-do Edo} {else-do Eelse}}[v/x] = {if Econd[v/x] {then-do Edo[v
 [(Smaller l r) (flang->bool (logic-op < l r))]
 [(Not b) (not b)]
 [else true]))
+
+(test (flang->bool (Equal (Num 5) (Num 5))) => #t)
+(test (flang->bool (Smaller (Num 5) (Num 5))) => #f)
+(test (flang->bool (Not (Bool true))) => #f)
 
 #|
 eval: Evaluation rules: 
@@ -338,13 +400,26 @@ eval(Eelse), otherwise.
  {if {< x 2} {then-do x} {else-do {/ x 2}}}}} foo}")
  => (Fun 'x (If (Smaller (Id 'x) (Num 2)) (Id 'x) (Div (Id 'x) (Num 2)))))
  
-;not working
 (test (run "{with {x 0}
  {if {> x 0} {/ 2 x} x}}")
- =error> "parse-sexpr: bad `if' syntax in (if (> x 0) (/ 2 x) x)")
- ;not working
+ =error> "parse-sexpr: bad 'if' syntax in (if (> x 0) (/ 2 x) x)")
  
 (test (run "true") =error> "eval: free identifier: true")
 (test (run "{< false 5}") =error> "eval: free identifier: false")
 (test (run "{< False 5}")
  =error> "Num->number: expected a number, got: #(struct:Bool #f)")
+(test (eval (Call (Fun 'x (Mul (Id 'x) (Num 4)))
+            (Num 3))) => (Num 12))
+(test (eval (Call (With 'foo
+                  (Fun 'x (Mul (Id 'x) (Num 4)))
+                  (Id 'foo))
+            (Num 3))) => (Num 12))
+(test (eval (Call (Fun 'x (Mul (Id 'x) (Num 4)))
+            (Num 3))) => (Num 12))
+(test (eval (Sub (Num 10) (Num 5))) => (Num 5))
+(test (eval (Call (Bool true)(Num 5))) =error> "eval: expected a function, got: #(struct:Bool #t)")
+(test (eval (Equal (Num 5) (Num 5))) => (Bool true))
+
+
+
+
