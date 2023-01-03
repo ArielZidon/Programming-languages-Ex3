@@ -318,3 +318,33 @@ eval(Eelse), otherwise.
 
 (test (run "{+ 10 20}")
       => 30)
+
+;==============================
+
+;; tests
+(test (run "True") => true)
+(test (run "{not True}") => false)
+(test (run "{> 3 44}") => false)
+(test (run "{if {- 3 3} {then-do 4} {else-do 5}}") => 4)
+(test (run "{with {x 8}
+ {if {> x 0} {then-do {/ 2 x}} {else-do x}}}") => 1/4)
+(test (run "{with {x 0}
+ {if {> x 0} {then-do {/ 2 x}} {else-do x}}}") => 0)
+(test (run "{if {> 2 1} {then-do True} {else-do {+ 2 2}}}") => true)
+(test (run "{with {c True}
+ {if c {then-do {> 2 1}} {else-do 2}}}")
+ => true)
+(test (run "{with {foo {fun {x}
+ {if {< x 2} {then-do x} {else-do {/ x 2}}}}} foo}")
+ => (Fun 'x (If (Smaller (Id 'x) (Num 2)) (Id 'x) (Div (Id 'x) (Num 2)))))
+ 
+;not working
+(test (run "{with {x 0}
+ {if {> x 0} {/ 2 x} x}}")
+ =error> "parse-sexpr: bad `if' syntax in (if (> x 0) (/ 2 x) x)")
+ ;not working
+ 
+(test (run "true") =error> "eval: free identifier: true")
+(test (run "{< false 5}") =error> "eval: free identifier: false")
+(test (run "{< False 5}")
+ =error> "Num->number: expected a number, got: #(struct:Bool #f)")
